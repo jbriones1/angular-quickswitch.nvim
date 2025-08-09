@@ -1,71 +1,98 @@
 local M = {}
 
-local file_path_transformations = {
-    unchanged = function(path) return path end,
+local ngRegex = ".(spec.ts|html|scss|sass|css|ts)$"
 
-    classToTemplate = function(path) return path:gsub("%.ts$", ".html") end,
-    templateToClass = function(path) return path:gsub("%.html$", ".ts") end,
+--- Determines if the file is a test/spec file.
+---@param path string Full path of the file
+---@return boolean
+local function is_spec(path)
+    return string.match(path, "%.spec.%ts$")
+end
 
-    testToClass = function(path) return path:gsub("%.spec%.ts$", ".ts") end,
-    classToTest = function(path) return path:gsub("%.ts$", ".spec.ts") end,
+--- Determines if the file is a component.
+---@param path string Full path of the file
+---@return boolean
+local function is_component(path)
+    return string.match(path, "%.component" .. ngRegex)
+end
 
-    testToTemplate = function(path) return path:gsub("%.spec%.ts$", ".html") end,
-    templateToTest = function(path) return path:gsub("%.html$", ".spec.ts") end,
-}
+--- Returns .css, .sass, or .scss of the Angular component
+---@param path string Full path of the file
+---@return string|nil
+local function get_style_file(path)
+    if not string.match(path, "%.component" .. ngRegex) then
+        error(": not a component", 1)
+        return nil
+    end
 
-local function open_target_file(opts)
-    local relative_file_path = vim.fn.expand("%")
-
-    for _, transformation in ipairs(opts.file_path_transformation_map) do
-        if string.match(relative_file_path, transformation.regex) then
-            local file_to_open = transformation.transform(relative_file_path)
-            vim.cmd.edit(file_to_open)
-            return
+    local style_exts = { "css", "scss", "sass" }
+    for _, ext in ipairs(style_exts) do
+        local style_file = string.gsub(path, ngRegex, ext)
+        local files = vim.fn.findfile(style_file)
+        if #files > 0 then
+            return files[1]
         end
     end
 
-    error(":" .. opts.command .. " could not determine target file", 1)
+    error(": no style file found", 1)
+    return nil
+end
+
+--- Opens the specified file.
+---@param path string Full path of the file
+---@param type string Type of file to open: `class`, `template`, `test` or `style`
+local function open_target_file(path, type)
+    local file_to_open = nil
+    if type == "class" then
+        file_to_open = string.gsub(path, ngRegex, ".ts")
+    elseif type == "template" then
+        file_to_open = string.gsub(path, ngRegex, ".html")
+    elseif type == "test" then
+        file_to_open = string.gsub(path, ngRegex, ".spec.ts")
+    elseif type == "style" then
+        file_to_open = get_style_file(path)
+    end
+
+    if file_to_open == nil then
+        error(": unknown target file", 1)
+        return
+    end
+
+    vim.cmd.edit(file_to_open)
 end
 
 function M.quick_switch_toggle()
-    local file_path_transformation_map = {
-        { regex = "%.component%.ts$",   transform = file_path_transformations.classToTemplate },
-        { regex = "%.component%.html$", transform = file_path_transformations.templateToClass },
-        { regex = "%.spec%.ts$",        transform = file_path_transformations.testToClass },
-        { regex = "%.ts$",              transform = file_path_transformations.classToTest },
-    }
+    local path = vim.fn.expand("%:p")
+    -- Default is the class file
+    local file_type = "class"
+    local ext = vim.fn.fnamemodify(path, ":e")
 
-    open_target_file({ file_path_transformation_map = file_path_transformation_map, command = "NgQuickSwitchToggle" })
+    if ext == "ts" then
+        -- If it's the class file for a component, go to the template
+        if is_component(path) and not is_spec(path) then
+            type = "template"
+        -- If it's a class file for anything else, go to the test file
+        elseif not is_spec(path) then
+            type = "test"
+        end
+    end
+    open_target_file(path, file_type)
 end
 
 function M.quick_switch_class()
-    local file_path_transformation_map = {
-        { regex = "%.spec%.ts$", transform = file_path_transformations.testToClass },
-        { regex = "%.ts$",       transform = file_path_transformations.unchanged },
-        { regex = "%.html$",     transform = file_path_transformations.templateToClass },
-    }
-
-    open_target_file({ file_path_transformation_map = file_path_transformation_map, command = "NgQuickSwitchClass" })
+    open_target_file(vim.fn.expand("%:p"), "class")
 end
 
 function M.quick_switch_template()
-    local file_path_transformation_map = {
-        { regex = "%.spec%.ts$", transform = file_path_transformations.testToTemplate },
-        { regex = "%.ts$",       transform = file_path_transformations.classToTemplate },
-        { regex = "%.html$",     transform = file_path_transformations.unchanged },
-    }
+    open_target_file(vim.fn.expand("%:p"), "template")
+end
 
-    open_target_file({ file_path_transformation_map = file_path_transformation_map, command = "NgQuickSwitchTemplate" })
+function M.quick_switch_style()
+    open_target_file(vim.fn.expand("%:p"), "style")
 end
 
 function M.quick_switch_test()
-    local file_path_transformation_map = {
-        { regex = "%.spec%.ts$", transform = file_path_transformations.unchanged },
-        { regex = "%.ts$",       transform = file_path_transformations.classToTest },
-        { regex = "%.html$",     transform = file_path_transformations.templateToTest },
-    }
-
-    open_target_file({ file_path_transformation_map = file_path_transformation_map, command = "NgQuickSwitchTest" })
+    open_target_file(vim.fn.expand("%:p"), "test")
 end
 
 function M.setup(opts)
