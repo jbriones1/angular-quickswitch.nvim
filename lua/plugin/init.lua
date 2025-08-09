@@ -72,7 +72,7 @@ function M.setup(opts)
     opts = opts or {}
 
     vim.api.nvim_create_user_command("NgQuickSwitchToggle", M.quick_switch_toggle, {})
-    vim.api.nvim_create_user_command("NgQuickSwitchComponent", M.quick_switch_class, {})
+    vim.api.nvim_create_user_command("NgQuickSwitchClass", M.quick_switch_class, {})
     vim.api.nvim_create_user_command("NgQuickSwitchTemplate", M.quick_switch_template, {})
     vim.api.nvim_create_user_command("NgQuickSwitchTest", M.quick_switch_test, {})
 
